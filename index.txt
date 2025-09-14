@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SHA-1 Hasher</title>
+  <style>
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: linear-gradient(135deg, #74ebd5 0%, #ACB6E5 100%);
+      margin: 0; 
+      padding: 40px; 
+    }
+    h1 { 
+      text-align: center; 
+      color: #222; 
+      font-size: 2.2em;
+      margin-bottom: 20px;
+    }
+    .container { 
+      max-width: 750px; 
+      margin: auto; 
+      background: #fff; 
+      padding: 30px; 
+      border-radius: 20px; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      animation: fadeIn 0.6s ease-in-out;
+    }
+    textarea, input[type=text], input[type=file] { 
+      width: 100%; 
+      padding: 14px; 
+      margin: 12px 0; 
+      border-radius: 12px; 
+      border: 1px solid #ccc; 
+      font-size: 15px; 
+      transition: all 0.3s ease;
+    }
+    textarea:focus, input:focus { 
+      border-color: #007BFF; 
+      outline: none; 
+      box-shadow: 0 0 6px rgba(0,123,255,0.3);
+    }
+    button { 
+      padding: 12px 24px; 
+      margin: 8px 0; 
+      border: none; 
+      border-radius: 12px; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff; 
+      cursor: pointer; 
+      font-size: 15px; 
+      font-weight: bold;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    button:hover { 
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+    }
+    #output { 
+      font-family: monospace; 
+      font-size: 15px; 
+      background: #f9f9f9; 
+    }
+    .label { font-weight: bold; margin-top: 15px; display: block; color: #333; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px);} to {opacity: 1; transform: translateY(0);} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 SHA-1 Hasher</h1>
+
+    <label class="label">Text Input</label>
+    <textarea id="input" rows="5" placeholder="Enter text..."></textarea>
+    <button onclick="hashText()">Hash (SHA-1)</button>
+
+    <label class="label">File Input</label>
+    <input type="file" id="fileInput">
+
+    <label class="label">Output Digest (160 bits / 40 hex chars)</label>
+    <input type="text" id="output" readonly>
+  </div>
+
+  <script>
+    // Rotate left
+    function ROTL(x, n) { return (x << n) | (x >>> (32 - n)); }
+
+    // SHA-1 from string
+    function sha1(msg) {
+      let msgBytes = new TextEncoder().encode(msg);
+      return sha1ArrayBuffer(msgBytes.buffer);
+    }
+
+    // SHA-1 from ArrayBuffer
+    function sha1ArrayBuffer(buf) {
+      let bytes = new Uint8Array(buf);
+      let ml = bytes.length * 8;
+
+      let withOne = new Uint8Array(bytes.length + 1);
+      withOne.set(bytes);
+      withOne[bytes.length] = 0x80;
+
+      let zeroPadLength = (56 - (withOne.length % 64) + 64) % 64;
+      let padded = new Uint8Array(withOne.length + zeroPadLength + 8);
+      padded.set(withOne);
+      let dv = new DataView(padded.buffer);
+      dv.setUint32(padded.length - 8, Math.floor(ml / 0x100000000));
+      dv.setUint32(padded.length - 4, ml >>> 0);
+
+      let h = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
+
+      for (let i = 0; i < padded.length; i += 64) {
+        let w = new Uint32Array(80);
+        let block = new DataView(padded.buffer, i, 64);
+        for (let j = 0; j < 16; j++) w[j] = block.getUint32(j * 4);
+        for (let j = 16; j < 80; j++) w[j] = ROTL(w[j-3] ^ w[j-8] ^ w[j-14] ^ w[j-16], 1);
+
+        let [a,b,c,d,e] = h;
+        for (let t = 0; t < 80; t++) {
+          let f, k;
+          if (t < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+          else if (t < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+          else if (t < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+          else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+
+          let temp = (ROTL(a,5) + f + e + k + w[t]) >>> 0;
+          e = d;
+          d = c;
+          c = ROTL(b,30);
+          b = a;
+          a = temp;
+        }
+
+        h[0] = (h[0] + a) >>> 0;
+        h[1] = (h[1] + b) >>> 0;
+        h[2] = (h[2] + c) >>> 0;
+        h[3] = (h[3] + d) >>> 0;
+        h[4] = (h[4] + e) >>> 0;
+      }
+
+      // Always return 40 hex chars (160 bits)
+      return h.map(n => ('00000000' + n.toString(16)).slice(-8)).join('').slice(0, 40);
+    }
+
+    // Hash from text
+    function hashText() {
+      let input = document.getElementById("input").value;
+      document.getElementById("output").value = sha1(input);
+    }
+
+    // Hash from file
+    document.getElementById("fileInput").addEventListener("change", function(e) {
+      let file = e.target.files[0];
+      if (!file) return;
+      let reader = new FileReader();
+      reader.onload = function(evt) {
+        let digest = sha1ArrayBuffer(evt.target.result);
+        document.getElementById("output").value = digest;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
